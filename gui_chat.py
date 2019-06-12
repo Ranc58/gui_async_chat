@@ -9,11 +9,12 @@ import sys
 import aionursery
 from aiofile import AIOFile
 
-import gui
-from chat_reader import read_stream_chat
-from chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
-    watch_for_output_connection, NicknameReceived, watch_for_input_connection, get_open_connection_tools
-from chat_writer import InvalidToken, write_stream_chat, authorise
+from core import gui
+from core.chat_reader import read_stream_chat
+from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
+    watch_for_output_connection, NicknameReceived, watch_for_input_connection, get_open_connection_tools, \
+    read_message_from_chat, write_message_to_chat, register
+from core.chat_writer import InvalidToken, write_stream_chat, authorise
 
 
 @contextlib.asynccontextmanager
@@ -54,7 +55,11 @@ async def send_connection(host, port, attempts, status_updates_queue, sending_qu
         async with get_open_connection_tools(host, port, attempts, status_updates_queue,
                                              SendingConnectionStateChanged) as (reader, writer):
             try:
-                nickname = await authorise(reader, writer, token, watchdog_queue)
+                if token:
+                    nickname = await authorise(reader, writer, token, watchdog_queue)
+                else:
+                    user_data = await register(reader, writer)
+                    nickname = user_data.get('nickname')
                 watchdog_queue.put_nowait('Authorization done')
                 status_updates_queue.put_nowait(NicknameReceived(nickname))
                 async with create_handy_nursery() as nursery:
@@ -83,13 +88,12 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
         )
 
 
-def setup_loggers(main_log=None, watchdog_log=None):
-    if main_log:
-        main_logger = logging.getLogger('')
-        main_logger.setLevel(logging.DEBUG)
-    if watchdog_log:
-        watchdog_logger = logging.getLogger('watchdog_logger')
-        watchdog_logger.setLevel(logging.INFO)
+def setup_loggers():
+    main_logger = logging.getLogger('')
+    main_logger.setLevel(logging.DEBUG)
+
+    watchdog_logger = logging.getLogger('watchdog_logger')
+    watchdog_logger.setLevel(logging.INFO)
 
 
 def create_parser_for_user_arguments():
@@ -119,39 +123,46 @@ def create_parser_for_user_arguments():
     return namespace
 
 
-async def get_token_from_file():
-    async with AIOFile('token.txt') as token_file:
+async def get_token_from_file(token_file_path=None):
+    if not token_file_path:
+        token_file_path = './token.txt'
+        if not os.path.exists(token_file_path):
+            return
+    async with AIOFile(token_file_path) as token_file:
         token = await token_file.read()
         return token
 
 
 async def main():
-    # todo refactor! add write port
-    setup_loggers(watchdog_log=True, main_log=True)  # todo  chbange true and false
+    setup_loggers()
     user_arguments = create_parser_for_user_arguments()
     history_log_path = user_arguments.history or os.getenv('HISTORY_LOG_DIR_PATH', f'{os.getcwd()}')
+
     if not os.path.exists(history_log_path):
         logging.error(f'history log path does not exist {history_log_path}')
         sys.exit(2)
+
+    token_file_path = user_arguments.token_file_path or os.getenv('TOKEN_FILE_PATH')
     if user_arguments.token_file_path and not os.path.exists(user_arguments.token_file_path):
         logging.error(f'token file path does not exist {user_arguments.token_file_path}')
         sys.exit(2)
-    else:
-        token_from_file = await get_token_from_file()
+    elif user_arguments.token_file_path:
+        token_file_path = user_arguments.token_file_path
+
+    token_from_file = await get_token_from_file(token_file_path)
     host = user_arguments.host or os.getenv('HOST', 'minechat.dvmn.org')
     read_port = user_arguments.read_port or os.getenv('READ_PORT', 5000)
-    send_port = user_arguments.send_port or os.getenv('SEND_PORT', 5050)  # TODO  ADD TO ENV
+    send_port = user_arguments.send_port or os.getenv('SEND_PORT', 5050)
     attempts = int(user_arguments.attempts or os.getenv('ATTEMPTS_COUNT', 3))
-    token = user_arguments.token or os.getenv('TOKEN') or token_from_file  # todo del token!
-
+    token = user_arguments.token or os.getenv('TOKEN') or token_from_file
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
     history_queue = asyncio.Queue()
     watchdog_queue = asyncio.Queue()
-
-    with open(f'{history_log_path}/history_logs.txt') as log_file:
-        messages_queue.put_nowait(log_file.read())
+    if os.path.exists(f'{history_log_path}/history_logs.txt'):
+        with open(f'{history_log_path}/history_logs.txt') as log_file:
+            messages_queue.put_nowait(log_file.read())
 
     async with create_handy_nursery() as nursery:
         nursery.start_soon(

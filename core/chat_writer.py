@@ -3,7 +3,7 @@ import logging
 
 from tkinter import messagebox
 
-from chat_tool import read_message_from_chat, write_message_to_chat
+from core.chat_tool import read_message_from_chat, write_message_to_chat
 
 
 class InvalidToken(Exception):
@@ -12,6 +12,7 @@ class InvalidToken(Exception):
 
 async def submit_message(writer, message):
     await write_message_to_chat(writer, f'{message}\n\n')
+
 
 async def send_msgs(queue, writer, watchdog_queue):
     message = await queue.get()
@@ -22,7 +23,7 @@ async def send_msgs(queue, writer, watchdog_queue):
 
 async def authorise(reader, writer, token, watchdog_queue):
     await read_message_from_chat(reader)
-    await write_message_to_chat(writer, f'{token}\n') # todo check
+    await write_message_to_chat(writer, f'{token}\n')
     watchdog_queue.put_nowait('Prompt before auth')
     decoded_data = await read_message_from_chat(reader)
     json_data = json.loads(decoded_data)

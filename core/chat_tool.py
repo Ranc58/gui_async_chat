@@ -37,7 +37,7 @@ class NicknameReceived:
         self.nickname = nickname
 
 
-@asynccontextmanager # todo del it or below
+@asynccontextmanager
 async def get_open_connection_tools(host, port, attempts, status_updates_queue, connection_state):
     try:
         reader, writer = await get_open_connection(host, port, attempts, status_updates_queue, connection_state)
@@ -46,11 +46,14 @@ async def get_open_connection_tools(host, port, attempts, status_updates_queue, 
         writer.close()
 
 
-async def register(reader, writer, nickname):
+async def register(reader, writer, nickname=None):
     await read_message_from_chat(reader)
     await write_message_to_chat(writer)
     await read_message_from_chat(reader)
-    await write_message_to_chat(writer, f'{nickname}\n')
+    message = None
+    if nickname:
+        message = f'{nickname}\n'
+    await write_message_to_chat(writer, message)
     decoded_data = await read_message_from_chat(reader)
     return json.loads(decoded_data)
 
@@ -101,13 +104,13 @@ async def get_open_connection(host, port, attempts, status_updates_queue, connec
     return reader, writer
 
 
-async def watch_for_input_connection(watchdog_queue, status_updates_queue): # todo refactor(replace and rename status queue)
+async def watch_for_input_connection(input_connections_queue, status_updates_queue):
     logger = logging.getLogger('watchdog_logger')
     while True:
         current_timestamp = datetime.now().timestamp()
         try:
             async with timeout(5):
-                message = await watchdog_queue.get()
+                message = await input_connections_queue.get()
                 logger.info(f'[{current_timestamp}] {message}')
             # because context manager doesn't work
         except asyncio.TimeoutError:

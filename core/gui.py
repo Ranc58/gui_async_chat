@@ -4,7 +4,7 @@ import asyncio
 
 from tkinter.scrolledtext import ScrolledText
 
-from chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, NicknameReceived
+from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, NicknameReceived
 from gui_chat import create_handy_nursery
 
 
@@ -81,7 +81,7 @@ def create_status_panel(root_frame):
     return (nickname_label, status_read_label, status_write_label)
 
 
-async def draw(messages_queue, sending_queue, status_updates_queue): # todo refactor
+async def draw(messages_queue, sending_queue, status_updates_queue):
     root = tk.Tk()
 
     root.title('Чат Майнкрафтера')

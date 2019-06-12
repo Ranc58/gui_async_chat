@@ -1,6 +1,6 @@
 from aiofile import AIOFile
 
-from chat_tool import read_message_from_chat
+from core.chat_tool import read_message_from_chat
 
 
 async def save_messages(log_file, queue):
