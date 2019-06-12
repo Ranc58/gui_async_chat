@@ -17,11 +17,12 @@ Python version required: 3.7+
         - `TOKEN_FILE_PATH` - path to file with unique user token(by default - `./token.txt`)\
   
 # How to launch
-Instead environ vars you can use arguments. For more info use `python3 chat_register.py --help` (for register) and `python3 gui_chat.py --help` (for chat)
+Instead environ vars you can use arguments. For more info use `python3 chat_register.py --help` (for register) and `python3 gui_chat.py --help` (for chat) \
+For using environ vars you need `source env/.env_file`.
 1. If you want registered:
    1) Run `python3 chat_register.py`. 
    2) Enter desired nickname. If all ok token will be saved in token file.
-2) If you are already registered or don't want register:
+2. If you are already registered or don't want register:
    1) For signin token is required. You can set it in `env/.env_file` or use argument or load from file(
    uses argument too or default `./token.txt.`).  
    2) Run `python3 gui_chat.py`
