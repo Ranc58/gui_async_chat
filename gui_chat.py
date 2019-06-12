@@ -12,8 +12,8 @@ from aiofile import AIOFile
 from core import gui
 from core.chat_reader import read_stream_chat
 from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
-    watch_for_output_connection, NicknameReceived, watch_for_input_connection, get_open_connection_tools, \
-    read_message_from_chat, write_message_to_chat, register
+    watch_for_output_connection, NicknameReceived, \
+    watch_for_input_connection, get_open_connection_tools, register
 from core.chat_writer import InvalidToken, write_stream_chat, authorise
 
 

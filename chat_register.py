@@ -25,24 +25,6 @@ def get_nickname(nickname_input, register_queue):
     nickname_input.delete(0, END)
 
 
-def create_parser_for_user_arguments():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', required=False,
-                        help='chat host',
-                        type=str)
-    parser.add_argument('--port', required=False,
-                        help='chat port for messages',
-                        type=int)
-    parser.add_argument('--attempts', required=False,
-                        help='connect attempts before timeout',
-                        type=str)
-    parser.add_argument('--token_file_path', required=False,
-                        help='file with token dir path',
-                        type=str)
-    namespace = parser.parse_args()
-    return namespace
-
-
 async def save_token(token, token_file_path):
     async with AIOFile(f'{token_file_path}', 'w') as token_file:
         await token_file.write(token)
@@ -111,6 +93,24 @@ async def draw_register_window(register_queue, status_updates_queue):
         nursery.start_soon(update_status(status_updates_queue, status_read_label))
 
 
+def create_parser_for_user_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', required=False,
+                        help='chat host',
+                        type=str)
+    parser.add_argument('--port', required=False,
+                        help='chat port for messages',
+                        type=int)
+    parser.add_argument('--attempts', required=False,
+                        help='connect attempts before timeout',
+                        type=str)
+    parser.add_argument('--token_file_path', required=False,
+                        help='file with token dir path',
+                        type=str)
+    namespace = parser.parse_args()
+    return namespace
+
+
 async def main():
     main_logger = logging.getLogger('')
     main_logger.setLevel(logging.DEBUG)
@@ -148,4 +148,3 @@ if __name__ == '__main__':
             JSONDecodeError
     ):
         exit()
-

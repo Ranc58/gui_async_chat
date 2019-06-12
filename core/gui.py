@@ -1,7 +1,5 @@
-
-import tkinter as tk
 import asyncio
-
+import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 
 from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, NicknameReceived

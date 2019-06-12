@@ -12,8 +12,6 @@ from contextlib import asynccontextmanager
 from async_timeout import timeout
 
 
-
-
 class ReadConnectionStateChanged(Enum):
     INITIATED = 'устанавливаем соединение'
     ESTABLISHED = 'соединение установлено'
