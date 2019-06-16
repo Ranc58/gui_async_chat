@@ -29,15 +29,19 @@ async def create_handy_nursery():
 
 
 async def read_connection(
-        host, port, attempts, status_updates_queue, messages_queue, history_queue, watchdog_queue, history_log_path):
+        host, port, attempts, status_updates_queue, messages_queue, history_queue, watchdog_queue, history_log_path
+):
     reader = None
     while not reader:
-        async with get_open_connection_tools(host, port, attempts, status_updates_queue, ReadConnectionStateChanged) as (reader, writer):
+        async with contextlib.AsyncExitStack() as stack:
+            (reader, writer) = await stack.enter_async_context(get_open_connection_tools(
+                host, port, attempts, status_updates_queue, ReadConnectionStateChanged)
+            )
+            nursery = await stack.enter_async_context(create_handy_nursery())
             try:
-                async with create_handy_nursery() as nursery:
-                    nursery.start_soon(
-                        read_stream_chat(reader, messages_queue, history_queue, watchdog_queue, history_log_path))
-                    nursery.start_soon(watch_for_input_connection(watchdog_queue, status_updates_queue))
+                nursery.start_soon(
+                    read_stream_chat(reader, messages_queue, history_queue, watchdog_queue, history_log_path))
+                nursery.start_soon(watch_for_input_connection(watchdog_queue, status_updates_queue))
 
             except (
                     socket.gaierror,
