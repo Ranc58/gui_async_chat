@@ -10,13 +10,9 @@ class InvalidToken(Exception):
     pass
 
 
-async def submit_message(writer, message):
-    await write_message_to_chat(writer, f'{message}\n\n')
-
-
 async def send_msgs(queue, writer, watchdog_queue):
     message = await queue.get()
-    await submit_message(writer, message)
+    await write_message_to_chat(writer, f'{message}\n\n')
     logging.debug(message)
     watchdog_queue.put_nowait('Message sent')
 
