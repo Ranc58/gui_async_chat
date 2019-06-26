@@ -47,10 +47,7 @@ async def register(reader, writer, nickname=None):
     await read_message_from_chat(reader)
     await write_message_to_chat(writer)
     await read_message_from_chat(reader)
-    message = None
-    if nickname:
-        message = f'{nickname}\n'
-    await write_message_to_chat(writer, message)
+    await write_message_to_chat(writer, nickname)
     decoded_data = await read_message_from_chat(reader)
     return json.loads(decoded_data)
 
@@ -65,6 +62,9 @@ async def read_message_from_chat(reader):
 async def write_message_to_chat(writer, message=None):
     if not message:
         message = '\n'
+    else:
+        message = message.replace('\n', '').strip()
+        message = f'{message}\n'
     message = f'{message}'
     writer.write(message.encode())
     await writer.drain()
