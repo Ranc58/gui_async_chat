@@ -75,19 +75,16 @@ async def get_open_connection(host, port, attempts, status_updates_queue, connec
     reader = None
     writer = None
     while not reader:
+        status_updates_queue.put_nowait(connection_state.INITIATED)
         try:
-            status_updates_queue.put_nowait(connection_state.INITIATED)
             reader, writer = await asyncio.open_connection(host, port)
-            success_connect_msg = 'Соединение установлено'
-            logging.debug(success_connect_msg)
-            status_updates_queue.put_nowait(connection_state.ESTABLISHED)
         except (
                 socket.gaierror,
                 ConnectionRefusedError,
                 ConnectionResetError,
                 ConnectionError,
         ):
-            status_updates_queue.put_nowait(connection_state.INITIATED)
+
             if attempts_count < int(attempts):
                 error_msg = 'Нет соединения. Повторная попытка.'
                 logging.debug(error_msg)
@@ -98,6 +95,10 @@ async def get_open_connection(host, port, attempts, status_updates_queue, connec
                 logging.debug(error_msg)
                 await asyncio.sleep(3)
                 continue
+        else:
+            success_connect_msg = 'Соединение установлено'
+            logging.debug(success_connect_msg)
+            status_updates_queue.put_nowait(connection_state.ESTABLISHED)
     return reader, writer
 
 
