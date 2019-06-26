@@ -10,7 +10,7 @@ import aionursery
 from aiofile import AIOFile
 
 from core import gui
-from core.chat_reader import read_stream_chat
+from core.chat_reader import read_stream_chat, save_messages
 from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
     watch_for_output_connection, NicknameReceived, \
     watch_for_input_connection, get_open_connection_tools, register
@@ -40,8 +40,13 @@ async def read_connection(
             nursery = await stack.enter_async_context(create_handy_nursery())
             try:
                 nursery.start_soon(
-                    read_stream_chat(reader, messages_queue, history_queue, watchdog_queue, history_log_path))
-                nursery.start_soon(watch_for_input_connection(watchdog_queue, status_updates_queue))
+                    read_stream_chat(reader, messages_queue, history_queue, watchdog_queue))
+                nursery.start_soon(
+                    watch_for_input_connection(watchdog_queue, status_updates_queue)
+                )
+                nursery.start_soon(
+                    save_messages(history_log_path, history_queue)
+                )
 
             except (
                     socket.gaierror,
