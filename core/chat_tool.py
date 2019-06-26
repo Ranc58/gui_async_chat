@@ -102,7 +102,7 @@ async def get_open_connection(host, port, attempts, status_updates_queue, connec
     return reader, writer
 
 
-async def watch_for_input_connection(input_connections_queue, status_updates_queue):
+async def watch_for_input_connection(input_connections_queue):
     logger = logging.getLogger('watchdog_logger')
     while True:
         current_timestamp = datetime.now().timestamp()
@@ -113,7 +113,12 @@ async def watch_for_input_connection(input_connections_queue, status_updates_que
             # because context manager doesn't work
         except asyncio.TimeoutError:
             logger.info(f'[{current_timestamp}] 5s timeout is elapsed')
-            status_updates_queue.put_nowait(ReadConnectionStateChanged.CLOSED)
+
+
+async def check_connection_status(status_updates_queue):
+    while True:
+        msg = await status_updates_queue.get()
+        if msg == SendingConnectionStateChanged.CLOSED:
             raise ConnectionError
 
 
@@ -127,4 +132,4 @@ async def watch_for_output_connection(writer, reader, status_updates_queue):
             # because context manager doesn't work
         except asyncio.TimeoutError:
             status_updates_queue.put_nowait(SendingConnectionStateChanged.CLOSED)
-            raise ConnectionError
+

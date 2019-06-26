@@ -13,7 +13,7 @@ from core import gui
 from core.chat_reader import read_stream_chat, save_messages
 from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
     watch_for_output_connection, NicknameReceived, \
-    watch_for_input_connection, get_open_connection_tools, register
+    watch_for_input_connection, get_open_connection_tools, register, check_connection_status
 from core.chat_writer import InvalidToken, write_stream_chat, authorise
 
 
@@ -29,52 +29,57 @@ async def create_handy_nursery():
 
 
 async def read_connection(
-        host, port, attempts, status_updates_queue, messages_queue, history_queue, watchdog_queue, history_log_path
+        reader, messages_queue, history_queue, watchdog_queue, history_log_path
 ):
+    async with contextlib.AsyncExitStack() as stack:
+        nursery = await stack.enter_async_context(create_handy_nursery())
+        nursery.start_soon(
+            read_stream_chat(reader, messages_queue, history_queue, watchdog_queue))
+        nursery.start_soon(
+            save_messages(history_log_path, history_queue)
+        )
+
+
+async def send_connection(reader, writer, status_updates_queue, sending_queue, watchdog_queue, token):
+    if token:
+        nickname = await authorise(reader, writer, token, watchdog_queue)
+    else:
+        user_data = await register(reader, writer)
+        nickname = user_data.get('nickname')
+    watchdog_queue.put_nowait('Authorization done')
+    status_updates_queue.put_nowait(NicknameReceived(nickname))
+    async with create_handy_nursery() as nursery:
+        nursery.start_soon(
+            write_stream_chat(writer, sending_queue, status_updates_queue))
+        nursery.start_soon(watch_for_output_connection(writer, reader, status_updates_queue))
+
+
+async def handle_connection(host, read_port, send_port, messages_queue, history_queue, watchdog_queue, sending_queue,
+                            status_updates_queue, token, attempts,
+                            history_log_path):
     reader = None
     while not reader:
         async with contextlib.AsyncExitStack() as stack:
-            (reader, writer) = await stack.enter_async_context(get_open_connection_tools(
-                host, port, attempts, status_updates_queue, ReadConnectionStateChanged)
+            (reader, _) = await stack.enter_async_context(get_open_connection_tools(
+                host, read_port, attempts, status_updates_queue, ReadConnectionStateChanged)
             )
-            nursery = await stack.enter_async_context(create_handy_nursery())
+            (write_reader, write_writer) = await stack.enter_async_context(get_open_connection_tools(
+                host, send_port, attempts, status_updates_queue, SendingConnectionStateChanged)
+            )
             try:
-                nursery.start_soon(
-                    read_stream_chat(reader, messages_queue, history_queue, watchdog_queue))
-                nursery.start_soon(
-                    watch_for_input_connection(watchdog_queue, status_updates_queue)
-                )
-                nursery.start_soon(
-                    save_messages(history_log_path, history_queue)
-                )
-
-            except (
-                    socket.gaierror,
-                    ConnectionRefusedError,
-                    ConnectionResetError,
-                    ConnectionError,
-            ):
-                reader = None
-                status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
-
-
-async def send_connection(host, port, attempts, status_updates_queue, sending_queue, watchdog_queue, token):
-    reader = None
-    while not reader:
-        async with get_open_connection_tools(host, port, attempts, status_updates_queue,
-                                             SendingConnectionStateChanged) as (reader, writer):
-            try:
-                if token:
-                    nickname = await authorise(reader, writer, token, watchdog_queue)
-                else:
-                    user_data = await register(reader, writer)
-                    nickname = user_data.get('nickname')
-                watchdog_queue.put_nowait('Authorization done')
-                status_updates_queue.put_nowait(NicknameReceived(nickname))
                 async with create_handy_nursery() as nursery:
                     nursery.start_soon(
-                        write_stream_chat(writer, sending_queue, status_updates_queue))
-                    nursery.start_soon(watch_for_output_connection(writer, reader, status_updates_queue))
+                        read_connection(reader, messages_queue, history_queue, watchdog_queue, history_log_path)
+                    )
+                    nursery.start_soon(
+                        send_connection(write_reader, write_writer, status_updates_queue, sending_queue, watchdog_queue, token)
+                    )
+                    nursery.start_soon(
+                        watch_for_input_connection(watchdog_queue)
+                    )
+                    nursery.start_soon(
+                        check_connection_status(status_updates_queue)
+                    )
             except (
                     socket.gaierror,
                     ConnectionRefusedError,
@@ -83,18 +88,8 @@ async def send_connection(host, port, attempts, status_updates_queue, sending_qu
             ):
                 reader = None
                 status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
-
-
-async def handle_connection(host, read_port, send_port, messages_queue, history_queue, watchdog_queue, sending_queue,
-                            status_updates_queue, token, attempts,
-                            history_log_path):
-    async with create_handy_nursery() as nursery:
-        nursery.start_soon(
-            read_connection(host, read_port, attempts, status_updates_queue, messages_queue, history_queue, watchdog_queue, history_log_path)
-        )
-        nursery.start_soon(
-            send_connection(host, send_port, attempts, status_updates_queue, sending_queue, watchdog_queue, token)
-        )
+                status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
+                continue
 
 
 def setup_loggers():
