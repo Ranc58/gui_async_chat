@@ -19,7 +19,7 @@ Python version required: 3.7+
 # How to launch
 Instead environ vars you can use arguments. For more info use `python3 chat_register.py --help` (for register) and `python3 gui_chat.py --help` (for chat) \
 For using environ vars you need `source env/.env_file`.
-1. If you want registered:
+1. If you want to register:
    1) Run `python3 chat_register.py`. 
    2) Enter desired nickname. If all ok token will be saved in token file.
 2. If you are already registered or don't want register:
