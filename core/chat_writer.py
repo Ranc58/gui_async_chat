@@ -24,11 +24,8 @@ async def authorise(reader, writer, token, watchdog_queue):
     decoded_data = await read_message_from_chat(reader)
     json_data = json.loads(decoded_data)
     if not json_data:
-        messagebox.showinfo("Неверный токен", "Проверьте токен, сервер не узнал его")
         raise InvalidToken()
     nickname = json_data.get("nickname")
-    msg = f'Выполнена авторизация. Пользователь {nickname}.'
-    logging.debug(msg)
     return nickname
 
 

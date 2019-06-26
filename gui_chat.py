@@ -5,6 +5,7 @@ import logging.config
 import os
 import socket
 import sys
+from tkinter import messagebox
 
 import aionursery
 from aiofile import AIOFile
@@ -43,6 +44,8 @@ async def read_connection(
 async def send_connection(reader, writer, status_updates_queue, sending_queue, watchdog_queue, token):
     if token:
         nickname = await authorise(reader, writer, token, watchdog_queue)
+        msg = f'Выполнена авторизация. Пользователь {nickname}.'
+        logging.debug(msg)
     else:
         user_data = await register(reader, writer)
         nickname = user_data.get('nickname')
@@ -90,6 +93,9 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                 status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
                 status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
                 continue
+            except InvalidToken:
+                messagebox.showinfo("Неверный токен", "Проверьте токен, сервер не узнал его")
+                raise
 
 
 def setup_loggers():
