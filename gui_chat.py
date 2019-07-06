@@ -15,7 +15,7 @@ from core.chat_reader import read_stream_chat, save_messages
 from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
     watch_for_output_connection, NicknameReceived, \
     watch_for_input_connection, get_open_connection_tools, register, check_connection_status
-from core.chat_writer import InvalidToken, write_stream_chat, authorise
+from core.chat_writer import InvalidToken, authorise, send_msgs, write_stream_chat
 
 
 @contextlib.asynccontextmanager
@@ -41,27 +41,29 @@ async def read_connection(
         )
 
 
-async def send_connection(reader, writer, status_updates_queue, sending_queue, watchdog_queue, token):
-    if token:
-        nickname = await authorise(reader, writer, token, watchdog_queue)
-        msg = f'Выполнена авторизация. Пользователь {nickname}.'
-        logging.debug(msg)
-    else:
-        user_data = await register(reader, writer)
-        nickname = user_data.get('nickname')
-    watchdog_queue.put_nowait('Authorization done')
-    status_updates_queue.put_nowait(NicknameReceived(nickname))
+async def send_connection(writer, status_updates_queue, sending_queue):
     async with create_handy_nursery() as nursery:
         nursery.start_soon(
             write_stream_chat(writer, sending_queue, status_updates_queue))
-        nursery.start_soon(watch_for_output_connection(writer, reader, status_updates_queue))
+
+
+async def watch_for_connection(reader, writer, status_updates_queue, watchdog_queue):
+    async with create_handy_nursery() as nursery:
+        nursery.start_soon(
+            watch_for_input_connection(watchdog_queue)
+        )
+        nursery.start_soon(
+            watch_for_output_connection(writer, reader, status_updates_queue)
+        )
+        nursery.start_soon(
+            check_connection_status(status_updates_queue)
+        )
 
 
 async def handle_connection(host, read_port, send_port, messages_queue, history_queue, watchdog_queue, sending_queue,
                             status_updates_queue, token, attempts,
                             history_log_path):
-    reader = None
-    while not reader:
+    while True:
         async with contextlib.AsyncExitStack() as stack:
             (reader, _) = await stack.enter_async_context(get_open_connection_tools(
                 host, read_port, attempts, status_updates_queue, ReadConnectionStateChanged)
@@ -70,18 +72,23 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                 host, send_port, attempts, status_updates_queue, SendingConnectionStateChanged)
             )
             try:
+                if token:
+                    nickname = await authorise(write_reader, write_writer, token, watchdog_queue)
+                    msg = f'Выполнена авторизация. Пользователь {nickname}.'
+                    logging.debug(msg)
+                else:
+                    user_data = await register(write_reader, write_writer)
+                    nickname = user_data.get('nickname')
+                status_updates_queue.put_nowait(NicknameReceived(nickname))
                 async with create_handy_nursery() as nursery:
                     nursery.start_soon(
                         read_connection(reader, messages_queue, history_queue, watchdog_queue, history_log_path)
                     )
                     nursery.start_soon(
-                        send_connection(write_reader, write_writer, status_updates_queue, sending_queue, watchdog_queue, token)
+                        send_connection(write_writer, status_updates_queue, sending_queue)
                     )
                     nursery.start_soon(
-                        watch_for_input_connection(watchdog_queue)
-                    )
-                    nursery.start_soon(
-                        check_connection_status(status_updates_queue)
+                        watch_for_connection(write_reader, write_writer, status_updates_queue, watchdog_queue)
                     )
             except (
                     socket.gaierror,
@@ -89,13 +96,13 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                     ConnectionResetError,
                     ConnectionError,
             ):
-                reader = None
                 status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
                 status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
                 continue
             except InvalidToken:
                 messagebox.showinfo("Неверный токен", "Проверьте токен, сервер не узнал его")
                 raise
+            break
 
 
 def setup_loggers():
