@@ -1,9 +1,11 @@
 import argparse
 import asyncio
+import contextlib
 import logging
 import os
 import socket
 import sys
+from contextlib import asynccontextmanager
 from json import JSONDecodeError
 from tkinter import Tk, Entry, Button, END, messagebox, Frame, Label
 
@@ -30,38 +32,48 @@ async def save_token(token, token_file_path):
         await token_file.write(token)
 
 
+@asynccontextmanager
+async def register_process(reader, writer, register_queue, status_updates_queue):
+    nickname = await register_queue.get()
+    try:
+        result = await register(reader, writer, nickname)
+        yield result
+    except JSONDecodeError:
+        messagebox.showinfo(
+            'Неудачная регистрация',
+            'Неудачная регистрация. Попробуйте еще раз'
+        )
+        raise
+    except (
+            socket.gaierror,
+            ConnectionRefusedError,
+            ConnectionResetError,
+            ConnectionError,
+    ):
+        yield
+    finally:
+        status_updates_queue.put_nowait(SendingConnectionStateChanged.CLOSED)
+
+
 async def register_new_user(host, port, attempts, status_updates_queue, register_queue, token_file_path):
-    reader = None
-    while not reader:
-        async with get_open_connection_tools(host, port, attempts, status_updates_queue,
-                                             SendingConnectionStateChanged) as (reader, writer):
-            nickname = await register_queue.get()
-            try:
-                result = await register(reader, writer, nickname)
-            except (
-                    socket.gaierror,
-                    ConnectionRefusedError,
-                    ConnectionResetError,
-                    ConnectionError,
-            ):
-                reader = None
-                status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
-            except JSONDecodeError:
-                status_updates_queue.put_nowait(SendingConnectionStateChanged.CLOSED)
-                messagebox.showinfo(
-                    'Неудачная регистрация',
-                    'Неудачная регистрация. Попробуйте еще раз'
-                )
-                raise
-            else:
-                token = result.get('account_hash')
-                registered_nickname = result.get('nickname')
-                await save_token(token, token_file_path)
-                messagebox.showinfo(
-                    "Успешная регистрация", f"Ваш ник: {registered_nickname}\n"
-                    f"Ваш токен сохранен в файле: {token_file_path}"
-                )
-                raise Registered
+    while True:
+        async with contextlib.AsyncExitStack() as stack:
+            reader, writer = await stack.enter_async_context(
+                get_open_connection_tools(host, port, attempts, status_updates_queue, SendingConnectionStateChanged)
+            )
+            result = await stack.enter_async_context(
+                register_process(reader, writer, register_queue, status_updates_queue)
+            )
+            if not result:
+                continue
+            token = result.get('account_hash')
+            registered_nickname = result.get('nickname')
+            await save_token(token, token_file_path)
+            messagebox.showinfo(
+                "Успешная регистрация", f"Ваш ник: {registered_nickname}\n"
+                f"Ваш токен сохранен в файле: {token_file_path}"
+            )
+            raise Registered
 
 
 async def update_status(status_updates_queue, write_label):
@@ -76,7 +88,7 @@ async def draw_register_window(register_queue, status_updates_queue):
     root_frame = Frame(root)
     nickname_input = Entry(width=20)
     label = Label(bg="grey", width=20, height=1, text="Введите желаемый ник")
-    register_button = Button(text="Зарегистрироваться",  bd=2)
+    register_button = Button(text="Зарегистрироваться", bd=2)
     register_button.bind('<Button-1>', lambda event: get_nickname(nickname_input, register_queue))
 
     status_read_label = Label(height=1, fg='grey', font='arial 10', anchor='w')
@@ -137,6 +149,7 @@ async def main():
         nursery.start_soon(
             register_new_user(host, port, attempts, status_updates_queue, register_queue, token_file_path)
         )
+
 
 if __name__ == '__main__':
     try:

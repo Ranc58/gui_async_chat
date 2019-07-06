@@ -1,7 +1,6 @@
 import json
 import logging
 
-from tkinter import messagebox
 
 from core.chat_tool import read_message_from_chat, write_message_to_chat
 

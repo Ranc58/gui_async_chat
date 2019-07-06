@@ -132,4 +132,3 @@ async def watch_for_output_connection(writer, reader, status_updates_queue):
             # because context manager doesn't work
         except asyncio.TimeoutError:
             status_updates_queue.put_nowait(SendingConnectionStateChanged.CLOSED)
-
