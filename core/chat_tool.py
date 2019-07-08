@@ -1,12 +1,10 @@
-import json
-from enum import Enum
-
 import asyncio
-
-from datetime import datetime
+import json
 import logging
 import socket
 from contextlib import asynccontextmanager
+from datetime import datetime
+from enum import Enum
 
 from async_timeout import timeout
 
@@ -102,13 +100,13 @@ async def get_open_connection(host, port, attempts, status_updates_queue, connec
     return reader, writer
 
 
-async def watch_for_input_connection(input_connections_queue):
+async def watch_for_input_connection(watchdog_queue):
     logger = logging.getLogger('watchdog_logger')
     while True:
         current_timestamp = datetime.now().timestamp()
         try:
             async with timeout(5):
-                message = await input_connections_queue.get()
+                message = await watchdog_queue.get()
                 logger.info(f'[{current_timestamp}] {message}')
             # because context manager doesn't work
         except asyncio.TimeoutError:

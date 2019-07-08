@@ -15,7 +15,7 @@ from core.chat_reader import read_stream_chat, save_messages
 from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
     watch_for_output_connection, NicknameReceived, \
     watch_for_input_connection, get_open_connection_tools, register, check_connection_status
-from core.chat_writer import InvalidToken, authorise, send_msgs, write_stream_chat
+from core.chat_writer import InvalidToken, authorise, write_stream_chat
 
 
 @contextlib.asynccontextmanager
