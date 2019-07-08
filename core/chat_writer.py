@@ -28,9 +28,9 @@ async def authorise(reader, writer, token, watchdog_queue):
     return nickname
 
 
-async def write_stream_chat(writer, sending_queue, status_updates_queue):
+async def write_stream_chat(writer, sending_queue, watchdog_queue):
     while True:
-        await send_msgs(sending_queue, writer, status_updates_queue)
+        await send_msgs(sending_queue, writer, watchdog_queue)
 
 
 

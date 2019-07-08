@@ -15,4 +15,4 @@ async def read_stream_chat(reader, messages_queue, history_queue, watchdog_queue
         decoded_data = await read_message_from_chat(reader)
         messages_queue.put_nowait(decoded_data)
         history_queue.put_nowait(decoded_data)
-        watchdog_queue.put_nowait('Connection is alive. New message in chat')
+        watchdog_queue.put_nowait('Read connection is alive. New message in chat')

@@ -5,16 +5,23 @@ import logging.config
 import os
 import socket
 import sys
+from datetime import datetime
 from tkinter import messagebox
 
 import aionursery
 from aiofile import AIOFile
+from async_timeout import timeout
 
 from core import gui
 from core.chat_reader import read_stream_chat, save_messages
-from core.chat_tool import ReadConnectionStateChanged, SendingConnectionStateChanged, \
-    watch_for_output_connection, NicknameReceived, \
-    watch_for_input_connection, get_open_connection_tools, register, check_connection_status
+from core.chat_tool import (
+    ReadConnectionStateChanged,
+    SendingConnectionStateChanged,
+    register,
+    send_watchdog_messages,
+    NicknameReceived,
+    get_open_connection_tools
+)
 from core.chat_writer import InvalidToken, authorise, write_stream_chat
 
 
@@ -41,23 +48,28 @@ async def read_connection(
         )
 
 
-async def send_connection(writer, status_updates_queue, sending_queue):
+async def send_connection(writer, reader, watchdog_queue, sending_queue):
     async with create_handy_nursery() as nursery:
         nursery.start_soon(
-            write_stream_chat(writer, sending_queue, status_updates_queue))
+            write_stream_chat(writer, sending_queue, watchdog_queue)
+        )
+        nursery.start_soon(
+            send_watchdog_messages(writer, reader, watchdog_queue)
+        )
 
 
-async def watch_for_connection(reader, writer, status_updates_queue, watchdog_queue):
-    async with create_handy_nursery() as nursery:
-        nursery.start_soon(
-            watch_for_input_connection(watchdog_queue)
-        )
-        nursery.start_soon(
-            watch_for_output_connection(writer, reader, status_updates_queue)
-        )
-        nursery.start_soon(
-            check_connection_status(status_updates_queue)
-        )
+async def watch_for_connection(watchdog_queue):
+    logger = logging.getLogger('watchdog_logger')
+    while True:
+        current_timestamp = datetime.now().timestamp()
+        try:
+            async with timeout(5):
+                message = await watchdog_queue.get()
+                logger.info(f'[{current_timestamp}] {message}')
+            # because context manager doesn't work
+        except asyncio.TimeoutError:
+            logger.info(f'[{current_timestamp}] 5s timeout is elapsed')
+            raise ConnectionError
 
 
 async def handle_connection(host, read_port, send_port, messages_queue, history_queue, watchdog_queue, sending_queue,
@@ -65,12 +77,19 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                             history_log_path):
     while True:
         async with contextlib.AsyncExitStack() as stack:
+
+            status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
+            status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
+
             (reader, _) = await stack.enter_async_context(get_open_connection_tools(
-                host, read_port, attempts, status_updates_queue, ReadConnectionStateChanged)
+                host, read_port, attempts)
             )
             (write_reader, write_writer) = await stack.enter_async_context(get_open_connection_tools(
-                host, send_port, attempts, status_updates_queue, SendingConnectionStateChanged)
+                host, send_port, attempts)
             )
+
+            status_updates_queue.put_nowait(SendingConnectionStateChanged.ESTABLISHED)
+            status_updates_queue.put_nowait(ReadConnectionStateChanged.ESTABLISHED)
             try:
                 if token:
                     nickname = await authorise(write_reader, write_writer, token, watchdog_queue)
@@ -85,10 +104,10 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                         read_connection(reader, messages_queue, history_queue, watchdog_queue, history_log_path)
                     )
                     nursery.start_soon(
-                        send_connection(write_writer, status_updates_queue, sending_queue)
+                        send_connection(write_writer, write_reader, watchdog_queue, sending_queue)
                     )
                     nursery.start_soon(
-                        watch_for_connection(write_reader, write_writer, status_updates_queue, watchdog_queue)
+                        watch_for_connection(watchdog_queue)
                     )
             except (
                     socket.gaierror,
@@ -96,8 +115,6 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                     ConnectionResetError,
                     ConnectionError,
             ):
-                status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
-                status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
                 continue
             except InvalidToken:
                 messagebox.showinfo("Неверный токен", "Проверьте токен, сервер не узнал его")
@@ -186,11 +203,13 @@ async def main():
             gui.draw(messages_queue, sending_queue, status_updates_queue)
         )
 
-        nursery.start_soon(handle_connection(host, read_port, send_port, messages_queue, history_queue,
-                                             watchdog_queue, sending_queue,
-                                             status_updates_queue,
-                                             token, attempts, history_log_path)
+        nursery.start_soon(
+            handle_connection(host, read_port, send_port, messages_queue, history_queue,
+                              watchdog_queue, sending_queue,
+                              status_updates_queue,
+                              token, attempts, history_log_path)
         )
+
 
 if __name__ == '__main__':
     try:
