@@ -115,6 +115,8 @@ async def handle_connection(host, read_port, send_port, messages_queue, history_
                     ConnectionResetError,
                     ConnectionError,
             ):
+                status_updates_queue.put_nowait(SendingConnectionStateChanged.CLOSED)
+                status_updates_queue.put_nowait(ReadConnectionStateChanged.CLOSED)
                 continue
             except InvalidToken:
                 messagebox.showinfo("Неверный токен", "Проверьте токен, сервер не узнал его")
